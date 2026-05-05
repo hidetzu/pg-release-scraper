@@ -137,7 +137,7 @@ rules:
       target: detail        # v0.2.0 では detail のみサポート
       value: '(?i)\b(meson|autoconf)\b'
     rationale: |
-      任意の自由記述。stderr / 出力ファイルにそのまま記録されます。
+      任意の自由記述。Excel の Attribution シートに記録されます。
 ```
 
 - `keyword` は大文字小文字を無視した部分一致。

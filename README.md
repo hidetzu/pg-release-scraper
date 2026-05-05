@@ -137,7 +137,7 @@ rules:
       target: detail        # only "detail" is supported in v0.2.0
       value: '(?i)\b(meson|autoconf)\b'
     rationale: |
-      Optional free-form note, shown in stderr/output for traceability.
+      Optional free-form note, recorded on the Excel Attribution sheet for traceability.
 ```
 
 - `keyword` matches case-insensitively as a substring.
