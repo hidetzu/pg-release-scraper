@@ -10,6 +10,8 @@
 
 A CLI tool that scrapes [PostgreSQL release notes](https://www.postgresql.org/docs/release/) for a given version range and exports them to an Excel workbook (`.xlsx`).
 
+![demo](./demo/demo.gif)
+
 Designed as an **upgrade-impact investigation worksheet** for PostgreSQL major-version upgrades. The output Excel sheet contains pre-defined columns (in **Japanese**) for tracking translations, investigation keywords, and findings — a workflow common in Japanese DBA / SI environments.
 
 ## Use case
