@@ -88,6 +88,8 @@ pg-release-scraper --start 14.5 --end 15.6 --stdout | claude -p "アプリへの
 
 #### Markdown の構造
 
+Markdown のレイアウトは Excel ワークシートの列構成に合わせています。各リリースノート項目は `### タイトル` 見出し + `Ver` / `No` メタ情報の構造になっており、Markdown の N 番目の項目が Excel の N 行目と対応します。`--rules` 適用時、除外された項目も Markdown に残り、`確認結果: 対象外 (rule: ...)` マーカーが付きます（Excel の `確認結果` 列と同じ振る舞い）。
+
 ```markdown
 # PostgreSQL Release Notes (14.5 → 15.6)
 
@@ -98,18 +100,27 @@ Source: https://www.postgresql.org/docs/release/
 
 ## 14.6
 
-1. **Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)**
+### Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)
 
-   One step of a concurrent refresh command...
+- Ver: 14.6
+- No: 1
 
-2. **Fix memory leak when performing JIT inlining (Andres Freund)**
+One step of a concurrent refresh command was run under weak security restrictions...
 
-   There have been multiple reports...
+---
+
+### Fix memory leak when performing JIT inlining (Andres Freund)
+
+- Ver: 14.6
+- No: 2
+- 確認結果: 対象外 (rule: exclude-build)
+
+There have been multiple reports...
+
+---
 
 ## 14.7
 ...
-
----
 
 ## Attribution
 - Source: https://www.postgresql.org/docs/release/
@@ -157,7 +168,7 @@ rules:
 `--rules` 指定時:
 
 - **stderr**（`--quiet` で抑制）: kept/removed 件数とルール別マッチ数
-- **Markdown**（残った項目のみ）: ヘッダにフィルター情報。除外された項目は出力されません
+- **Markdown**（全件）: ヘッダにフィルター情報。除外された項目も出力され、各項目のメタ情報に `確認結果: 対象外 (rule: <id>[, <id>...])` が自動付与されます（Excel と1:1 対応）
 - **Excel メインシート**（全件）: 除外された項目も含めて全件出力。除外項目は F 列（`確認結果`）に `対象外 (rule: <id>[, <id>...])` が自動入力され、レビュー時に上書き可能です
 - **Excel `Attribution` シート**: ルール一覧（ID/Action/Kind/Value/Matched/Rationale）
 

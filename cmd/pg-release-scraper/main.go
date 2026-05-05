@@ -61,7 +61,6 @@ func main() {
 
 	var summary *filter.Summary
 	var items []filter.Annotated
-	keptReleases := releases
 	if *rulesPath != "" {
 		rules, err := filter.LoadRulesFile(*rulesPath)
 		if err != nil {
@@ -71,10 +70,10 @@ func main() {
 		res := filter.Apply(rules, releases)
 		summary = &filter.Summary{RulesPath: *rulesPath, Rules: rules, Result: res}
 		items = res.Items
-		keptReleases = res.Kept()
 		if !*quiet {
+			kept := len(res.Kept())
 			fmt.Fprintf(os.Stderr, "filter: kept %d / removed %d (rules: %d)\n",
-				len(keptReleases), res.Total-len(keptReleases), len(rules))
+				kept, res.Total-kept, len(rules))
 			for _, r := range rules {
 				fmt.Fprintf(os.Stderr, "  %s: matched %d\n", r.ID, res.Hits[r.ID])
 			}
@@ -84,15 +83,13 @@ func main() {
 	}
 
 	if wantMD {
-		if len(keptReleases) == 0 {
-			fmt.Fprintf(os.Stderr, "warning: skipping Markdown output (all items excluded by rules: %s)\n", *rulesPath)
-		} else if *useStdout {
-			if err := markdown.Render(os.Stdout, keptReleases, *start, *end, summary); err != nil {
+		if *useStdout {
+			if err := markdown.Render(os.Stdout, items, *start, *end, summary); err != nil {
 				fmt.Fprintln(os.Stderr, "render md failed:", err)
 				os.Exit(1)
 			}
 		} else {
-			path, err := markdown.Write(keptReleases, *start, *end, *output, summary)
+			path, err := markdown.Write(items, *start, *end, *output, summary)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "write md failed:", err)
 				os.Exit(1)

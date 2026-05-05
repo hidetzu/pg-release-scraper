@@ -88,6 +88,8 @@ Main sheet columns:
 
 #### Markdown structure
 
+The Markdown layout mirrors the Excel worksheet's column structure. Each release-note item gets a `### Title` heading with `Ver` / `No` metadata, so item N in the Markdown corresponds to row N in the Excel sheet. Excluded items (when `--rules` is used) are kept in the output and tagged with the `確認結果: 対象外 (rule: ...)` marker — same as the Excel `確認結果` column.
+
 ```markdown
 # PostgreSQL Release Notes (14.5 → 15.6)
 
@@ -98,18 +100,27 @@ Source: https://www.postgresql.org/docs/release/
 
 ## 14.6
 
-1. **Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)**
+### Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)
 
-   One step of a concurrent refresh command...
+- Ver: 14.6
+- No: 1
 
-2. **Fix memory leak when performing JIT inlining (Andres Freund)**
+One step of a concurrent refresh command was run under weak security restrictions...
 
-   There have been multiple reports...
+---
+
+### Fix memory leak when performing JIT inlining (Andres Freund)
+
+- Ver: 14.6
+- No: 2
+- 確認結果: 対象外 (rule: exclude-build)
+
+There have been multiple reports...
+
+---
 
 ## 14.7
 ...
-
----
 
 ## Attribution
 - Source: https://www.postgresql.org/docs/release/
@@ -157,7 +168,7 @@ Each release-note item is checked against every `exclude` rule. If at least one 
 When `--rules` is used:
 
 - **stderr** (suppressed by `--quiet`): kept/removed counts and per-rule match counts
-- **Markdown** (kept items only): filter metadata in the header; excluded items are not rendered
+- **Markdown** (all items): filter metadata in the header; excluded items are still rendered with `確認結果: 対象外 (rule: <id>[, <id>...])` in the per-item metadata so the Markdown matches the Excel sheet 1:1
 - **Excel main sheet** (all items): excluded items are still listed, with `対象外 (rule: <id>[, <id>...])` automatically filled in column F (`確認結果`) so reviewers can audit and override the auto-judgement
 - **Excel `Attribution` sheet**: rule list with ID/Action/Kind/Value/Matched/Rationale
 
