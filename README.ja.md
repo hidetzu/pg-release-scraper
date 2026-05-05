@@ -46,6 +46,7 @@ pg-release-scraper --start 14.0 --end 15.6
 | `--stdout` | Markdown を `.md` ファイルではなく標準出力に書く（xlsx が含まれる場合は引き続きファイル出力） | `false` |
 | `--output <dir>` | 出力先ディレクトリ | `./output` |
 | `--quiet` | エラー以外の出力を抑制 | `false` |
+| `--rules <path>` | exclude フィルタ用 YAML ルールファイル — [ルールによるフィルタリング](#ルールによるフィルタリング)を参照 | — |
 | `--version` | ツールのバージョンを表示して終了 | — |
 
 ### LLM へのパイプ
@@ -58,8 +59,10 @@ pg-release-scraper --start 14.5 --end 15.6 --stdout | claude -p "アプリへの
 
 デフォルトでは2種類のファイルが出力ディレクトリに生成されます:
 
-- `postgresql-release-notes_YYYYMMDD-HHMM.xlsx` — 日本のSI/DBA向けの調査ワークシート
-- `postgresql-release-notes_YYYYMMDD-HHMM.md` — LLM入力／PR・Issue貼付け／grep用のMarkdown
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.xlsx` — 日本のSI/DBA向けの調査ワークシート
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.md` — LLM入力／PR・Issue貼付け／grep用のMarkdown
+
+ファイル名にバージョン範囲が入るので、異なる範囲で実行した結果を取り違えにくくなっています。
 
 片方だけ欲しい場合は `--format` を、Markdown を直接パイプしたい場合は `--stdout` を使ってください。
 
@@ -85,6 +88,8 @@ pg-release-scraper --start 14.5 --end 15.6 --stdout | claude -p "アプリへの
 
 #### Markdown の構造
 
+Markdown のレイアウトは Excel ワークシートの列構成に合わせています。各リリースノート項目は `### タイトル` 見出し + `Ver` / `No` メタ情報の構造になっており、Markdown の N 番目の項目が Excel の N 行目と対応します。`--rules` 適用時、除外された項目も Markdown に残り、`確認結果: 対象外 (rule: ...)` マーカーが付きます（Excel の `確認結果` 列と同じ振る舞い）。
+
 ```markdown
 # PostgreSQL Release Notes (14.5 → 15.6)
 
@@ -95,23 +100,84 @@ Source: https://www.postgresql.org/docs/release/
 
 ## 14.6
 
-1. **Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)**
+### Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)
 
-   One step of a concurrent refresh command...
+- Ver: 14.6
+- No: 1
 
-2. **Fix memory leak when performing JIT inlining (Andres Freund)**
+One step of a concurrent refresh command was run under weak security restrictions...
 
-   There have been multiple reports...
+---
+
+### Fix memory leak when performing JIT inlining (Andres Freund)
+
+- Ver: 14.6
+- No: 2
+- 確認結果: 対象外 (rule: exclude-build)
+
+There have been multiple reports...
+
+---
 
 ## 14.7
 ...
-
----
 
 ## Attribution
 - Source: https://www.postgresql.org/docs/release/
 - Copyright (c) The PostgreSQL Global Development Group
 - ...
+```
+
+## ルールによるフィルタリング
+
+バージョンアップ調査では、ビルドシステム関連・プラットフォーム固有・ドキュメント単独修正など、アプリケーション動作に影響しない項目が多く含まれます。`--rules <path>` で YAML ルールファイルを指定すると、これらを事前に除外できます。
+
+```bash
+pg-release-scraper --start 14.5 --end 15.6 --rules examples/rules/app-impact.yaml
+```
+
+サンプル: [`examples/rules/app-impact.yaml`](./examples/rules/app-impact.yaml)。テキストマッチによる絞り込みは誤判定が発生しうるため、最終判断は人間が行う前提で利用してください。
+
+### ルールファイル書式 (v1)
+
+```yaml
+version: 1
+rules:
+  - id: exclude-build
+    action: exclude         # v0.2.0 では exclude のみサポート
+    match:
+      kind: regex           # keyword | regex
+      target: detail        # v0.2.0 では detail のみサポート
+      value: '(?i)\b(meson|autoconf)\b'
+    rationale: |
+      任意の自由記述。Excel の Attribution シートに記録されます。
+```
+
+- `keyword` は大文字小文字を無視した部分一致。
+- `regex` は Go の [RE2](https://pkg.go.dev/regexp/syntax) 構文（PCRE系の前後読みは不可）。大小無視は `(?i)` をパターン先頭に付けてください。
+- `id` はファイル内ユニーク。
+- `rationale` はマッチ判定に影響しない情報項目です。
+- `include` アクションは v0.2.0 では**サポート外**です。指定すると `exit 2` で停止します。
+
+### 評価
+
+各リリースノート項目は、すべての `exclude` ルールに対してマッチ判定されます。1件でもマッチ（OR）した項目は対象外として扱われます。ルールの記述順は結果に影響しません。
+
+### 出力への反映
+
+`--rules` 指定時:
+
+- **stderr**（`--quiet` で抑制）: kept/removed 件数とルール別マッチ数
+- **Markdown**（全件）: ヘッダにフィルター情報。除外された項目も出力され、各項目のメタ情報に `確認結果: 対象外 (rule: <id>[, <id>...])` が自動付与されます（Excel と1:1 対応）
+- **Excel メインシート**（全件）: 除外された項目も含めて全件出力。除外項目は F 列（`確認結果`）に `対象外 (rule: <id>[, <id>...])` が自動入力され、レビュー時に上書き可能です
+- **Excel `Attribution` シート**: ルール一覧（ID/Action/Kind/Value/Matched/Rationale）
+
+### バリデーションエラー
+
+ルールファイルに不備がある場合は終了コード `2` で停止します（必須項目欠落、未知の enum 値、`id` 重複、regex コンパイル失敗など）。エラーメッセージにはインデックスと id が含まれます:
+
+```
+rules.yaml: rule[2] (id=exclude-docs): invalid regex: error parsing regexp: ...
 ```
 
 ## 動作の補足

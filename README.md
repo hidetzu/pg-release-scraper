@@ -46,6 +46,7 @@ pg-release-scraper --start 14.0 --end 15.6
 | `--stdout` | Write Markdown to stdout instead of an `.md` file (xlsx still goes to file when included) | `false` |
 | `--output <dir>` | Output directory | `./output` |
 | `--quiet` | Suppress non-error output | `false` |
+| `--rules <path>` | YAML rules file for exclude filtering — see [Filtering with rules](#filtering-with-rules) | — |
 | `--version` | Print tool version and exit | — |
 
 ### Pipe to an LLM
@@ -58,8 +59,10 @@ pg-release-scraper --start 14.5 --end 15.6 --stdout | claude -p "Summarize the i
 
 By default the tool generates two parallel files in the output directory:
 
-- `postgresql-release-notes_YYYYMMDD-HHMM.xlsx` — Excel workbook for the Japanese investigation worksheet workflow
-- `postgresql-release-notes_YYYYMMDD-HHMM.md` — Markdown for LLMs, PRs, issues, and grep-friendly review
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.xlsx` — Excel workbook for the Japanese investigation worksheet workflow
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.md` — Markdown for LLMs, PRs, issues, and grep-friendly review
+
+The version range is embedded in the filename so multiple runs against different ranges don't get confused with each other.
 
 Use `--format` to limit to one, or `--stdout` to pipe Markdown directly.
 
@@ -85,6 +88,8 @@ Main sheet columns:
 
 #### Markdown structure
 
+The Markdown layout mirrors the Excel worksheet's column structure. Each release-note item gets a `### Title` heading with `Ver` / `No` metadata, so item N in the Markdown corresponds to row N in the Excel sheet. Excluded items (when `--rules` is used) are kept in the output and tagged with the `確認結果: 対象外 (rule: ...)` marker — same as the Excel `確認結果` column.
+
 ```markdown
 # PostgreSQL Release Notes (14.5 → 15.6)
 
@@ -95,23 +100,84 @@ Source: https://www.postgresql.org/docs/release/
 
 ## 14.6
 
-1. **Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)**
+### Tighten security restrictions within REFRESH MATERIALIZED VIEW CONCURRENTLY (Heikki Linnakangas)
 
-   One step of a concurrent refresh command...
+- Ver: 14.6
+- No: 1
 
-2. **Fix memory leak when performing JIT inlining (Andres Freund)**
+One step of a concurrent refresh command was run under weak security restrictions...
 
-   There have been multiple reports...
+---
+
+### Fix memory leak when performing JIT inlining (Andres Freund)
+
+- Ver: 14.6
+- No: 2
+- 確認結果: 対象外 (rule: exclude-build)
+
+There have been multiple reports...
+
+---
 
 ## 14.7
 ...
-
----
 
 ## Attribution
 - Source: https://www.postgresql.org/docs/release/
 - Copyright (c) The PostgreSQL Global Development Group
 - ...
+```
+
+## Filtering with rules
+
+When investigating an upgrade, many release-note items (build-system tweaks, platform-specific fixes, documentation-only changes) are not relevant to application behaviour. Pass `--rules <path>` to drop them up front:
+
+```bash
+pg-release-scraper --start 14.5 --end 15.6 --rules examples/rules/app-impact.yaml
+```
+
+A starter file is provided at [`examples/rules/app-impact.yaml`](./examples/rules/app-impact.yaml). Tune it for your environment — text matching produces false positives/negatives, so the final call always belongs to a human reviewer.
+
+### Rules file format (v1)
+
+```yaml
+version: 1
+rules:
+  - id: exclude-build
+    action: exclude         # only "exclude" is supported in v0.2.0
+    match:
+      kind: regex           # keyword | regex
+      target: detail        # only "detail" is supported in v0.2.0
+      value: '(?i)\b(meson|autoconf)\b'
+    rationale: |
+      Optional free-form note, recorded on the Excel Attribution sheet for traceability.
+```
+
+- `keyword` matches case-insensitively as a substring.
+- `regex` uses Go's [RE2](https://pkg.go.dev/regexp/syntax) — no PCRE lookarounds. Add `(?i)` inside the pattern for case-insensitive regex matching.
+- `id` must be unique within the file.
+- `rationale` is informational; it does not affect matching.
+- `include` actions are **not** supported in v0.2.0; specifying one fails fast with `exit 2`.
+
+### Evaluation
+
+Each release-note item is checked against every `exclude` rule. If at least one rule matches (OR), the item is treated as out-of-scope. Rule order within the file does not affect the result.
+
+### Output integration
+
+When `--rules` is used:
+
+- **stderr** (suppressed by `--quiet`): kept/removed counts and per-rule match counts
+- **Markdown** (all items): filter metadata in the header; excluded items are still rendered with `確認結果: 対象外 (rule: <id>[, <id>...])` in the per-item metadata so the Markdown matches the Excel sheet 1:1
+- **Excel main sheet** (all items): excluded items are still listed, with `対象外 (rule: <id>[, <id>...])` automatically filled in column F (`確認結果`) so reviewers can audit and override the auto-judgement
+- **Excel `Attribution` sheet**: rule list with ID/Action/Kind/Value/Matched/Rationale
+
+### Validation errors
+
+The tool exits with status `2` on any rule-file error (missing fields, unknown enum value, duplicate `id`, regex compile failure, etc.). Error messages include the rule index and id:
+
+```
+rules.yaml: rule[2] (id=exclude-docs): invalid regex: error parsing regexp: ...
 ```
 
 ## Behavior notes

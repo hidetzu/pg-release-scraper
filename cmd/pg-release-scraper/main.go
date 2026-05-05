@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 
 	"github.com/hidetzu/pg-release-scraper/internal/excel"
+	"github.com/hidetzu/pg-release-scraper/internal/filter"
 	"github.com/hidetzu/pg-release-scraper/internal/markdown"
 	"github.com/hidetzu/pg-release-scraper/internal/scraper"
 )
@@ -18,11 +19,12 @@ func main() {
 	format := flag.String("format", "both", "Output format: md, xlsx, or both")
 	useStdout := flag.Bool("stdout", false, "Write Markdown to stdout instead of an .md file (xlsx still goes to file when --format includes xlsx)")
 	quiet := flag.Bool("quiet", false, "Suppress non-error output")
+	rulesPath := flag.String("rules", "", "Path to YAML rules file for exclude filtering (see examples/rules/)")
 	printVersion := flag.Bool("version", false, "Print version and exit")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Scrape PostgreSQL release notes for a version range and export to Excel and/or Markdown.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage: %s --start <version> --end <version> [--format md|xlsx|both] [--output <dir>] [--stdout] [--quiet]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s --start <version> --end <version> [--format md|xlsx|both] [--output <dir>] [--rules <path>] [--stdout] [--quiet]\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -51,19 +53,43 @@ func main() {
 	if !*quiet {
 		fmt.Fprintf(os.Stderr, "fetched %d release note items\n", len(releases))
 	}
+
 	if len(releases) == 0 {
 		fmt.Fprintf(os.Stderr, "warning: no release notes found for range %s..%s\n", *start, *end)
 		return
 	}
 
+	var summary *filter.Summary
+	var items []filter.Annotated
+	if *rulesPath != "" {
+		rules, err := filter.LoadRulesFile(*rulesPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		res := filter.Apply(rules, releases)
+		summary = &filter.Summary{RulesPath: *rulesPath, Rules: rules, Result: res}
+		items = res.Items
+		if !*quiet {
+			kept := len(res.Kept())
+			fmt.Fprintf(os.Stderr, "filter: kept %d / removed %d (rules: %d)\n",
+				kept, res.Total-kept, len(rules))
+			for _, r := range rules {
+				fmt.Fprintf(os.Stderr, "  %s: matched %d\n", r.ID, res.Hits[r.ID])
+			}
+		}
+	} else {
+		items = filter.AnnotateAll(releases)
+	}
+
 	if wantMD {
 		if *useStdout {
-			if err := markdown.Render(os.Stdout, releases, *start, *end); err != nil {
+			if err := markdown.Render(os.Stdout, items, *start, *end, summary); err != nil {
 				fmt.Fprintln(os.Stderr, "render md failed:", err)
 				os.Exit(1)
 			}
 		} else {
-			path, err := markdown.Write(releases, *start, *end, *output)
+			path, err := markdown.Write(items, *start, *end, *output, summary)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "write md failed:", err)
 				os.Exit(1)
@@ -75,7 +101,7 @@ func main() {
 	}
 
 	if wantXLSX {
-		path, err := excel.Write(releases, *output)
+		path, err := excel.Write(items, *start, *end, *output, summary)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "write xlsx failed:", err)
 			os.Exit(1)
