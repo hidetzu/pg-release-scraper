@@ -16,7 +16,7 @@ func Write(releases []scraper.Release, start, end, outDir string, summary *filte
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
-	filename := fmt.Sprintf("postgresql-release-notes_%s.md", time.Now().Format("20060102-1504"))
+	filename := fmt.Sprintf("postgresql-release-notes_%s_%s_%s.md", start, end, time.Now().Format("20060102-1504"))
 	path := filepath.Join(outDir, filename)
 	f, err := os.Create(path)
 	if err != nil {

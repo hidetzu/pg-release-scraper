@@ -19,7 +19,10 @@ var headers = []string{"Ver", "No", "原文", "翻訳(意味)", "調査キーワ
 // Write renders all items (including ones excluded by rules) to the main
 // worksheet. Excluded items get an automatic mark in the 確認結果 (F)
 // column so reviewers can audit and override the auto-judgement.
-func Write(items []filter.Annotated, outDir string, summary *filter.Summary) (string, error) {
+//
+// start and end are the version range used for fetching; they are embedded
+// in the output filename to disambiguate runs against different ranges.
+func Write(items []filter.Annotated, start, end, outDir string, summary *filter.Summary) (string, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
@@ -100,7 +103,7 @@ func Write(items []filter.Annotated, outDir string, summary *filter.Summary) (st
 		return "", err
 	}
 
-	filename := fmt.Sprintf("postgresql-release-notes_%s.xlsx", time.Now().Format("20060102-1504"))
+	filename := fmt.Sprintf("postgresql-release-notes_%s_%s_%s.xlsx", start, end, time.Now().Format("20060102-1504"))
 	path := filepath.Join(outDir, filename)
 	if err := f.SaveAs(path); err != nil {
 		return "", fmt.Errorf("save xlsx: %w", err)

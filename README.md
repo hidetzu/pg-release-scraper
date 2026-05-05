@@ -59,8 +59,10 @@ pg-release-scraper --start 14.5 --end 15.6 --stdout | claude -p "Summarize the i
 
 By default the tool generates two parallel files in the output directory:
 
-- `postgresql-release-notes_YYYYMMDD-HHMM.xlsx` — Excel workbook for the Japanese investigation worksheet workflow
-- `postgresql-release-notes_YYYYMMDD-HHMM.md` — Markdown for LLMs, PRs, issues, and grep-friendly review
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.xlsx` — Excel workbook for the Japanese investigation worksheet workflow
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.md` — Markdown for LLMs, PRs, issues, and grep-friendly review
+
+The version range is embedded in the filename so multiple runs against different ranges don't get confused with each other.
 
 Use `--format` to limit to one, or `--stdout` to pipe Markdown directly.
 

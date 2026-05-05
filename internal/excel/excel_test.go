@@ -19,12 +19,15 @@ func TestWrite(t *testing.T) {
 		{Version: "15.7", Detail: "Item from a later version"},
 	})
 
-	path, err := Write(items, dir, nil)
+	path, err := Write(items, "15.6", "15.7", dir, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	if filepath.Dir(path) != dir {
 		t.Fatalf("output not in temp dir: got %s, want under %s", path, dir)
+	}
+	if !strings.Contains(filepath.Base(path), "15.6_15.7") {
+		t.Errorf("filename should contain version range: %s", path)
 	}
 
 	f, err := excelize.OpenFile(path)
@@ -114,7 +117,7 @@ func TestWrite_ExcludedItemsMarked(t *testing.T) {
 		},
 	}
 
-	path, err := Write(items, dir, nil)
+	path, err := Write(items, "15.6", "15.7", dir, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}

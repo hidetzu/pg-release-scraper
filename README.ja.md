@@ -59,8 +59,10 @@ pg-release-scraper --start 14.5 --end 15.6 --stdout | claude -p "アプリへの
 
 デフォルトでは2種類のファイルが出力ディレクトリに生成されます:
 
-- `postgresql-release-notes_YYYYMMDD-HHMM.xlsx` — 日本のSI/DBA向けの調査ワークシート
-- `postgresql-release-notes_YYYYMMDD-HHMM.md` — LLM入力／PR・Issue貼付け／grep用のMarkdown
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.xlsx` — 日本のSI/DBA向けの調査ワークシート
+- `postgresql-release-notes_<start>_<end>_YYYYMMDD-HHMM.md` — LLM入力／PR・Issue貼付け／grep用のMarkdown
+
+ファイル名にバージョン範囲が入るので、異なる範囲で実行した結果を取り違えにくくなっています。
 
 片方だけ欲しい場合は `--format` を、Markdown を直接パイプしたい場合は `--stdout` を使ってください。
 

@@ -104,7 +104,7 @@ func main() {
 	}
 
 	if wantXLSX {
-		path, err := excel.Write(items, *output, summary)
+		path, err := excel.Write(items, *start, *end, *output, summary)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "write xlsx failed:", err)
 			os.Exit(1)
