@@ -46,6 +46,7 @@ pg-release-scraper --start 14.0 --end 15.6
 | `--stdout` | Markdown を `.md` ファイルではなく標準出力に書く（xlsx が含まれる場合は引き続きファイル出力） | `false` |
 | `--output <dir>` | 出力先ディレクトリ | `./output` |
 | `--quiet` | エラー以外の出力を抑制 | `false` |
+| `--rules <path>` | include/exclude フィルタ用 YAML ルールファイル — [ルールによるフィルタリング](#ルールによるフィルタリング)を参照 | — |
 | `--version` | ツールのバージョンを表示して終了 | — |
 
 ### LLM へのパイプ
@@ -112,6 +113,59 @@ Source: https://www.postgresql.org/docs/release/
 - Source: https://www.postgresql.org/docs/release/
 - Copyright (c) The PostgreSQL Global Development Group
 - ...
+```
+
+## ルールによるフィルタリング
+
+バージョンアップ調査では、ビルドシステム関連・プラットフォーム固有・ドキュメント単独修正など、アプリケーション動作に影響しない項目が多く含まれます。`--rules <path>` で YAML ルールファイルを指定すると、これらを事前に除外できます。
+
+```bash
+pg-release-scraper --start 14.5 --end 15.6 --rules examples/rules/app-impact.yaml
+```
+
+サンプル: [`examples/rules/app-impact.yaml`](./examples/rules/app-impact.yaml)。テキストマッチによる絞り込みは誤判定が発生しうるため、最終判断は人間が行う前提で利用してください。
+
+### ルールファイル書式 (v1)
+
+```yaml
+version: 1
+rules:
+  - id: exclude-build
+    action: exclude         # include | exclude
+    match:
+      kind: regex           # keyword | regex
+      target: detail        # v0.2.0 では detail のみサポート
+      value: '(?i)\b(meson|autoconf)\b'
+    rationale: |
+      任意の自由記述。stderr / 出力ファイルにそのまま記録されます。
+```
+
+- `keyword` は大文字小文字を無視した部分一致。
+- `regex` は Go の [RE2](https://pkg.go.dev/regexp/syntax) 構文（PCRE系の前後読みは不可）。大小無視は `(?i)` をパターン先頭に付けてください。
+- `id` はファイル内ユニーク。
+- `rationale` はマッチ判定に影響しない情報項目です。
+
+### 評価順序
+
+1. `include` ルールが1件以上あれば、いずれかにマッチ（OR）した項目のみが残ります。`include` 未指定時は全件通過。
+2. その後、いずれかの `exclude` ルールにマッチ（OR）した項目を除外します。
+
+ルールの記述順は結果に影響しません。
+
+### 出力への反映
+
+`--rules` 指定時、kept/removed 件数とルール別マッチ数が以下に出力されます。
+
+- stderr（`--quiet` で抑制）
+- Markdown ヘッダ
+- Excel `Attribution` シート末尾の「Filter rules」セクション
+
+### バリデーションエラー
+
+ルールファイルに不備がある場合は終了コード `2` で停止します（必須項目欠落、未知の enum 値、`id` 重複、regex コンパイル失敗など）。エラーメッセージにはインデックスと id が含まれます:
+
+```
+rules.yaml: rule[2] (id=exclude-docs): invalid regex: error parsing regexp: ...
 ```
 
 ## 動作の補足

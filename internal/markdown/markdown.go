@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hidetzu/pg-release-scraper/internal/filter"
 	"github.com/hidetzu/pg-release-scraper/internal/scraper"
 )
 
-func Write(releases []scraper.Release, start, end, outDir string) (string, error) {
+func Write(releases []scraper.Release, start, end, outDir string, summary *filter.Summary) (string, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
@@ -22,17 +23,24 @@ func Write(releases []scraper.Release, start, end, outDir string) (string, error
 		return "", err
 	}
 	defer f.Close()
-	if err := Render(f, releases, start, end); err != nil {
+	if err := Render(f, releases, start, end, summary); err != nil {
 		return "", err
 	}
 	return path, nil
 }
 
-func Render(w io.Writer, releases []scraper.Release, start, end string) error {
+func Render(w io.Writer, releases []scraper.Release, start, end string, summary *filter.Summary) error {
 	ew := &errWriter{w: w}
 	ew.printf("# PostgreSQL Release Notes (%s → %s)\n\n", start, end)
 	ew.printf("Generated: %s\n", time.Now().UTC().Format("2006-01-02 15:04 UTC"))
 	ew.println("Source: https://www.postgresql.org/docs/release/")
+	if summary != nil {
+		ew.println()
+		ew.printf("Filter: rules=%s  kept=%d/%d\n", summary.RulesPath, len(summary.Result.Kept), summary.Result.Total)
+		for _, r := range summary.Rules {
+			ew.printf("- %s (%s, %s): matched %d\n", r.ID, r.Action, r.Kind, summary.Result.Hits[r.ID])
+		}
+	}
 	ew.println()
 	ew.println("---")
 	ew.println()

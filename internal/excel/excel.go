@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/hidetzu/pg-release-scraper/internal/filter"
 	"github.com/hidetzu/pg-release-scraper/internal/scraper"
 	"github.com/xuri/excelize/v2"
 )
@@ -15,7 +16,7 @@ const attributionSheetName = "Attribution"
 
 var headers = []string{"Ver", "No", "原文", "翻訳(意味)", "調査キーワード", "確認結果", "調査対象", "備考"}
 
-func Write(releases []scraper.Release, outDir string) (string, error) {
+func Write(releases []scraper.Release, outDir string, summary *filter.Summary) (string, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
@@ -47,7 +48,7 @@ func Write(releases []scraper.Release, outDir string) (string, error) {
 		}
 	}
 
-	if err := addAttributionSheet(f); err != nil {
+	if err := addAttributionSheet(f, summary); err != nil {
 		return "", err
 	}
 
@@ -98,7 +99,7 @@ func Write(releases []scraper.Release, outDir string) (string, error) {
 	return path, nil
 }
 
-func addAttributionSheet(f *excelize.File) error {
+func addAttributionSheet(f *excelize.File, summary *filter.Summary) error {
 	if _, err := f.NewSheet(attributionSheetName); err != nil {
 		return err
 	}
@@ -127,6 +128,43 @@ func addAttributionSheet(f *excelize.File) error {
 	}
 	if err := f.SetCellStyle(attributionSheetName, "A1", fmt.Sprintf("A%d", len(rows)), style); err != nil {
 		return err
+	}
+
+	if summary != nil {
+		if err := writeFilterSection(f, len(rows)+2, summary); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFilterSection(f *excelize.File, startRow int, s *filter.Summary) error {
+	row := startRow
+	header := fmt.Sprintf("Filter rules: %s  (kept %d / %d)", s.RulesPath, len(s.Result.Kept), s.Result.Total)
+	cell, _ := excelize.CoordinatesToCellName(1, row)
+	if err := f.SetCellValue(attributionSheetName, cell, header); err != nil {
+		return err
+	}
+	row += 2
+
+	cols := []string{"ID", "Action", "Kind", "Value", "Matched", "Rationale"}
+	for i, c := range cols {
+		cell, _ := excelize.CoordinatesToCellName(i+1, row)
+		if err := f.SetCellValue(attributionSheetName, cell, c); err != nil {
+			return err
+		}
+	}
+	row++
+
+	for _, r := range s.Rules {
+		vals := []any{r.ID, string(r.Action), string(r.Kind), r.Value, s.Result.Hits[r.ID], r.Rationale}
+		for i, v := range vals {
+			cell, _ := excelize.CoordinatesToCellName(i+1, row)
+			if err := f.SetCellValue(attributionSheetName, cell, v); err != nil {
+				return err
+			}
+		}
+		row++
 	}
 	return nil
 }

@@ -46,6 +46,7 @@ pg-release-scraper --start 14.0 --end 15.6
 | `--stdout` | Write Markdown to stdout instead of an `.md` file (xlsx still goes to file when included) | `false` |
 | `--output <dir>` | Output directory | `./output` |
 | `--quiet` | Suppress non-error output | `false` |
+| `--rules <path>` | YAML rules file for include/exclude filtering — see [Filtering with rules](#filtering-with-rules) | — |
 | `--version` | Print tool version and exit | — |
 
 ### Pipe to an LLM
@@ -112,6 +113,59 @@ Source: https://www.postgresql.org/docs/release/
 - Source: https://www.postgresql.org/docs/release/
 - Copyright (c) The PostgreSQL Global Development Group
 - ...
+```
+
+## Filtering with rules
+
+When investigating an upgrade, many release-note items (build-system tweaks, platform-specific fixes, documentation-only changes) are not relevant to application behaviour. Pass `--rules <path>` to drop them up front:
+
+```bash
+pg-release-scraper --start 14.5 --end 15.6 --rules examples/rules/app-impact.yaml
+```
+
+A starter file is provided at [`examples/rules/app-impact.yaml`](./examples/rules/app-impact.yaml). Tune it for your environment — text matching produces false positives/negatives, so the final call always belongs to a human reviewer.
+
+### Rules file format (v1)
+
+```yaml
+version: 1
+rules:
+  - id: exclude-build
+    action: exclude         # include | exclude
+    match:
+      kind: regex           # keyword | regex
+      target: detail        # only "detail" is supported in v0.2.0
+      value: '(?i)\b(meson|autoconf)\b'
+    rationale: |
+      Optional free-form note, shown in stderr/output for traceability.
+```
+
+- `keyword` matches case-insensitively as a substring.
+- `regex` uses Go's [RE2](https://pkg.go.dev/regexp/syntax) — no PCRE lookarounds. Add `(?i)` inside the pattern for case-insensitive regex matching.
+- `id` must be unique within the file.
+- `rationale` is informational; it does not affect matching.
+
+### Evaluation order
+
+1. If any `include` rules are defined, an item must match **at least one** of them (OR) to survive. Otherwise everything passes.
+2. Any item matching **any** `exclude` rule (OR) is then dropped.
+
+Rule order within the file does not affect the result.
+
+### Output integration
+
+When `--rules` is used, kept/removed counts and per-rule match counts are:
+
+- printed to stderr (suppressed by `--quiet`)
+- embedded in the Markdown header
+- listed on the Excel `Attribution` sheet under "Filter rules"
+
+### Validation errors
+
+The tool exits with status `2` on any rule-file error (missing fields, unknown enum value, duplicate `id`, regex compile failure, etc.). Error messages include the rule index and id:
+
+```
+rules.yaml: rule[2] (id=exclude-docs): invalid regex: error parsing regexp: ...
 ```
 
 ## Behavior notes

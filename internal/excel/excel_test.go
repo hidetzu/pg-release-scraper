@@ -18,7 +18,7 @@ func TestWrite(t *testing.T) {
 		{Version: "15.7", Detail: "Item from a later version"},
 	}
 
-	path, err := Write(releases, dir)
+	path, err := Write(releases, dir, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}

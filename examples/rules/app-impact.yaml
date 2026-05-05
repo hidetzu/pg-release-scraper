@@ -1,0 +1,48 @@
+# Sample rules: starting point for application-impact investigation.
+#
+# These rules drop release notes that are unlikely to affect application
+# behaviour (build system, platform-specific fixes, documentation-only
+# changes, translation updates). Tune to your environment before relying on
+# the output — false positives/negatives are inevitable with text matching.
+#
+# Usage:
+#   pg-release-scraper --start 14.5 --end 15.6 --rules examples/rules/app-impact.yaml
+version: 1
+rules:
+  - id: exclude-build
+    action: exclude
+    match:
+      kind: regex
+      target: detail
+      value: '(?i)\b(meson|autoconf|configure script|MSVC|Cygwin|MinGW)\b'
+    rationale: |
+      Build-system / toolchain changes that do not affect runtime behaviour.
+
+  - id: exclude-platform
+    action: exclude
+    match:
+      kind: regex
+      target: detail
+      value: '(?i)\bon (Windows|macOS|Solaris|AIX|HP-UX)\b'
+    rationale: |
+      Fixes that only apply to specific OS platforms. Remove this rule if
+      you actually run PostgreSQL on one of these targets.
+
+  - id: exclude-docs-only
+    action: exclude
+    match:
+      kind: regex
+      target: detail
+      value: '(?i)^(Improve|Update|Fix) (the )?documentation\b'
+    rationale: |
+      Documentation-only updates. Anchored at line start to avoid catching
+      items where docs are mentioned alongside a real change.
+
+  - id: exclude-translation
+    action: exclude
+    match:
+      kind: regex
+      target: detail
+      value: '(?i)\b(translation|locale message)\b'
+    rationale: |
+      Message-catalog / i18n updates.

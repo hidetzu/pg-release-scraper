@@ -18,7 +18,7 @@ func TestRender(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := Render(&buf, releases, "15.6", "15.7"); err != nil {
+	if err := Render(&buf, releases, "15.6", "15.7", nil); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := buf.String()
@@ -52,7 +52,7 @@ func TestRender_SkipsEmptyDetail(t *testing.T) {
 		{Version: "15.6", Detail: "Third valid item\nbody"},
 	}
 	var buf bytes.Buffer
-	if err := Render(&buf, releases, "15.6", "15.6"); err != nil {
+	if err := Render(&buf, releases, "15.6", "15.6", nil); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := buf.String()
@@ -71,14 +71,14 @@ func TestRender_PropagatesWriteError(t *testing.T) {
 	releases := []scraper.Release{{Version: "15.6", Detail: "x\nbody"}}
 
 	t.Run("first write fails", func(t *testing.T) {
-		err := Render(&failingWriter{failAfter: 0}, releases, "15.6", "15.6")
+		err := Render(&failingWriter{failAfter: 0}, releases, "15.6", "15.6", nil)
 		if err == nil {
 			t.Fatal("expected error from failing writer, got nil")
 		}
 	})
 
 	t.Run("mid-stream write fails", func(t *testing.T) {
-		err := Render(&failingWriter{failAfter: 3}, releases, "15.6", "15.6")
+		err := Render(&failingWriter{failAfter: 3}, releases, "15.6", "15.6", nil)
 		if err == nil {
 			t.Fatal("expected error from mid-stream failure, got nil")
 		}
@@ -103,7 +103,7 @@ func TestWrite(t *testing.T) {
 	releases := []scraper.Release{
 		{Version: "15.6", Detail: "Sample\nWith body."},
 	}
-	path, err := Write(releases, "15.6", "15.6", dir)
+	path, err := Write(releases, "15.6", "15.6", dir, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}

@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/temoto/robotstxt v1.1.2
 	github.com/xuri/excelize/v2 v2.10.1
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
