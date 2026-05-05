@@ -19,7 +19,7 @@ func main() {
 	format := flag.String("format", "both", "Output format: md, xlsx, or both")
 	useStdout := flag.Bool("stdout", false, "Write Markdown to stdout instead of an .md file (xlsx still goes to file when --format includes xlsx)")
 	quiet := flag.Bool("quiet", false, "Suppress non-error output")
-	rulesPath := flag.String("rules", "", "Path to YAML rules file for include/exclude filtering (see examples/rules/)")
+	rulesPath := flag.String("rules", "", "Path to YAML rules file for exclude filtering (see examples/rules/)")
 	printVersion := flag.Bool("version", false, "Print version and exit")
 
 	flag.Usage = func() {
@@ -54,7 +54,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fetched %d release note items\n", len(releases))
 	}
 
+	if len(releases) == 0 {
+		fmt.Fprintf(os.Stderr, "warning: no release notes found for range %s..%s\n", *start, *end)
+		return
+	}
+
 	var summary *filter.Summary
+	var items []filter.Annotated
+	keptReleases := releases
 	if *rulesPath != "" {
 		rules, err := filter.LoadRulesFile(*rulesPath)
 		if err != nil {
@@ -63,33 +70,29 @@ func main() {
 		}
 		res := filter.Apply(rules, releases)
 		summary = &filter.Summary{RulesPath: *rulesPath, Rules: rules, Result: res}
-		releases = res.Kept
+		items = res.Items
+		keptReleases = res.Kept()
 		if !*quiet {
 			fmt.Fprintf(os.Stderr, "filter: kept %d / removed %d (rules: %d)\n",
-				len(res.Kept), res.Total-len(res.Kept), len(rules))
+				len(keptReleases), res.Total-len(keptReleases), len(rules))
 			for _, r := range rules {
 				fmt.Fprintf(os.Stderr, "  %s: matched %d\n", r.ID, res.Hits[r.ID])
 			}
 		}
-	}
-
-	if len(releases) == 0 {
-		if summary != nil {
-			fmt.Fprintf(os.Stderr, "warning: no release notes left after filtering (rules: %s)\n", *rulesPath)
-		} else {
-			fmt.Fprintf(os.Stderr, "warning: no release notes found for range %s..%s\n", *start, *end)
-		}
-		return
+	} else {
+		items = filter.AnnotateAll(releases)
 	}
 
 	if wantMD {
-		if *useStdout {
-			if err := markdown.Render(os.Stdout, releases, *start, *end, summary); err != nil {
+		if len(keptReleases) == 0 {
+			fmt.Fprintf(os.Stderr, "warning: skipping Markdown output (all items excluded by rules: %s)\n", *rulesPath)
+		} else if *useStdout {
+			if err := markdown.Render(os.Stdout, keptReleases, *start, *end, summary); err != nil {
 				fmt.Fprintln(os.Stderr, "render md failed:", err)
 				os.Exit(1)
 			}
 		} else {
-			path, err := markdown.Write(releases, *start, *end, *output, summary)
+			path, err := markdown.Write(keptReleases, *start, *end, *output, summary)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "write md failed:", err)
 				os.Exit(1)
@@ -101,7 +104,7 @@ func main() {
 	}
 
 	if wantXLSX {
-		path, err := excel.Write(releases, *output, summary)
+		path, err := excel.Write(items, *output, summary)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "write xlsx failed:", err)
 			os.Exit(1)

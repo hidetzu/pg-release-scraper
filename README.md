@@ -46,7 +46,7 @@ pg-release-scraper --start 14.0 --end 15.6
 | `--stdout` | Write Markdown to stdout instead of an `.md` file (xlsx still goes to file when included) | `false` |
 | `--output <dir>` | Output directory | `./output` |
 | `--quiet` | Suppress non-error output | `false` |
-| `--rules <path>` | YAML rules file for include/exclude filtering — see [Filtering with rules](#filtering-with-rules) | — |
+| `--rules <path>` | YAML rules file for exclude filtering — see [Filtering with rules](#filtering-with-rules) | — |
 | `--version` | Print tool version and exit | — |
 
 ### Pipe to an LLM
@@ -131,7 +131,7 @@ A starter file is provided at [`examples/rules/app-impact.yaml`](./examples/rule
 version: 1
 rules:
   - id: exclude-build
-    action: exclude         # include | exclude
+    action: exclude         # only "exclude" is supported in v0.2.0
     match:
       kind: regex           # keyword | regex
       target: detail        # only "detail" is supported in v0.2.0
@@ -144,21 +144,20 @@ rules:
 - `regex` uses Go's [RE2](https://pkg.go.dev/regexp/syntax) — no PCRE lookarounds. Add `(?i)` inside the pattern for case-insensitive regex matching.
 - `id` must be unique within the file.
 - `rationale` is informational; it does not affect matching.
+- `include` actions are **not** supported in v0.2.0; specifying one fails fast with `exit 2`.
 
-### Evaluation order
+### Evaluation
 
-1. If any `include` rules are defined, an item must match **at least one** of them (OR) to survive. Otherwise everything passes.
-2. Any item matching **any** `exclude` rule (OR) is then dropped.
-
-Rule order within the file does not affect the result.
+Each release-note item is checked against every `exclude` rule. If at least one rule matches (OR), the item is treated as out-of-scope. Rule order within the file does not affect the result.
 
 ### Output integration
 
-When `--rules` is used, kept/removed counts and per-rule match counts are:
+When `--rules` is used:
 
-- printed to stderr (suppressed by `--quiet`)
-- embedded in the Markdown header
-- listed on the Excel `Attribution` sheet under "Filter rules"
+- **stderr** (suppressed by `--quiet`): kept/removed counts and per-rule match counts
+- **Markdown** (kept items only): filter metadata in the header; excluded items are not rendered
+- **Excel main sheet** (all items): excluded items are still listed, with `対象外 (rule: <id>[, <id>...])` automatically filled in column F (`確認結果`) so reviewers can audit and override the auto-judgement
+- **Excel `Attribution` sheet**: rule list with ID/Action/Kind/Value/Matched/Rationale
 
 ### Validation errors
 

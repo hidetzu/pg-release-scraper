@@ -22,8 +22,8 @@ rules:
       value: '(?i)\bmeson\b'
     rationale: |
       Build system noise.
-  - id: in-server
-    action: include
+  - id: ex-pgdump
+    action: exclude
     match:
       kind: keyword
       target: detail
@@ -39,7 +39,7 @@ rules:
 	if rules[0].ID != "ex-build" || rules[0].Action != ActionExclude || rules[0].Kind != KindRegex {
 		t.Fatalf("rule[0] = %+v", rules[0])
 	}
-	if rules[1].ID != "in-server" || rules[1].Action != ActionInclude || rules[1].Kind != KindKeyword {
+	if rules[1].ID != "ex-pgdump" || rules[1].Action != ActionExclude || rules[1].Kind != KindKeyword {
 		t.Fatalf("rule[1] = %+v", rules[1])
 	}
 	if rules[0].Rationale == "" {
@@ -70,7 +70,7 @@ rules:
     action: exclude
     match: {kind: keyword, target: detail, value: x}
   - id: dup
-    action: include
+    action: exclude
     match: {kind: keyword, target: detail, value: y}
 `,
 			wantSub: "duplicate id",
@@ -95,6 +95,17 @@ rules:
     match: {kind: keyword, target: detail, value: x}
 `,
 			wantSub: `invalid action "maybe"`,
+		},
+		{
+			name: "include action not supported",
+			body: `
+version: 1
+rules:
+  - id: r1
+    action: include
+    match: {kind: keyword, target: detail, value: x}
+`,
+			wantSub: `not supported in v0.2.0`,
 		},
 		{
 			name: "missing action",

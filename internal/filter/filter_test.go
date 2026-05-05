@@ -3,7 +3,6 @@ package filter
 import (
 	"reflect"
 	"regexp"
-	"sort"
 	"testing"
 
 	"github.com/hidetzu/pg-release-scraper/internal/scraper"
@@ -71,84 +70,76 @@ func TestApply(t *testing.T) {
 		"Add new SQL function jsonb_path_exists",
 	)
 
-	t.Run("no rules: pass through", func(t *testing.T) {
+	t.Run("no rules: pass through, no annotations", func(t *testing.T) {
 		got := Apply(nil, all)
-		if len(got.Kept) != len(all) {
-			t.Fatalf("kept=%d, want %d", len(got.Kept), len(all))
-		}
 		if got.Total != len(all) {
 			t.Fatalf("total=%d, want %d", got.Total, len(all))
 		}
+		if len(got.Items) != len(all) {
+			t.Fatalf("items=%d, want %d", len(got.Items), len(all))
+		}
+		for i, it := range got.Items {
+			if len(it.ExcludedBy) != 0 {
+				t.Errorf("items[%d] should have no exclusions, got %v", i, it.ExcludedBy)
+			}
+		}
+		if !reflect.DeepEqual(keptDetails(got.Kept()), keptDetails(all)) {
+			t.Fatalf("Kept()=%v, want %v", keptDetails(got.Kept()), keptDetails(all))
+		}
 	})
 
-	t.Run("exclude only", func(t *testing.T) {
+	t.Run("exclude rule annotates and drops from Kept", func(t *testing.T) {
 		rules := []Rule{
 			mustKeyword(t, "no-build", ActionExclude, "meson"),
 			mustKeyword(t, "no-docs", ActionExclude, "documentation"),
 		}
 		got := Apply(rules, all)
-		want := []string{
+
+		wantKept := []string{
 			"Improve pg_dump performance",
 			"Add new SQL function jsonb_path_exists",
 		}
-		if !reflect.DeepEqual(keptDetails(got.Kept), want) {
-			t.Fatalf("kept=%v, want %v", keptDetails(got.Kept), want)
+		if !reflect.DeepEqual(keptDetails(got.Kept()), wantKept) {
+			t.Fatalf("Kept()=%v, want %v", keptDetails(got.Kept()), wantKept)
 		}
 		if got.Hits["no-build"] != 1 || got.Hits["no-docs"] != 1 {
 			t.Fatalf("hits=%v", got.Hits)
 		}
+
+		// Items must include all releases, with annotations on excluded ones.
+		if len(got.Items) != len(all) {
+			t.Fatalf("items=%d, want %d", len(got.Items), len(all))
+		}
+		wantExcl := map[string][]string{
+			"Update meson build scripts":            {"no-build"},
+			"Improve pg_dump performance":           nil,
+			"Fix the documentation for COPY":        {"no-docs"},
+			"Add new SQL function jsonb_path_exists": nil,
+		}
+		for _, it := range got.Items {
+			if !reflect.DeepEqual(it.ExcludedBy, wantExcl[it.Release.Detail]) {
+				t.Errorf("ExcludedBy for %q = %v, want %v",
+					it.Release.Detail, it.ExcludedBy, wantExcl[it.Release.Detail])
+			}
+		}
 	})
 
-	t.Run("include only narrows", func(t *testing.T) {
+	t.Run("multiple rules match same release: all are recorded", func(t *testing.T) {
+		rs := releases("Update documentation for the meson build")
 		rules := []Rule{
-			mustKeyword(t, "only-pgdump", ActionInclude, "pg_dump"),
+			mustKeyword(t, "no-build", ActionExclude, "meson"),
+			mustKeyword(t, "no-docs", ActionExclude, "documentation"),
 		}
-		got := Apply(rules, all)
-		want := []string{"Improve pg_dump performance"}
-		if !reflect.DeepEqual(keptDetails(got.Kept), want) {
-			t.Fatalf("kept=%v, want %v", keptDetails(got.Kept), want)
+		got := Apply(rules, rs)
+		if len(got.Items) != 1 {
+			t.Fatalf("items=%d, want 1", len(got.Items))
 		}
-		if got.Hits["only-pgdump"] != 1 {
+		want := []string{"no-build", "no-docs"}
+		if !reflect.DeepEqual(got.Items[0].ExcludedBy, want) {
+			t.Fatalf("ExcludedBy=%v, want %v", got.Items[0].ExcludedBy, want)
+		}
+		if got.Hits["no-build"] != 1 || got.Hits["no-docs"] != 1 {
 			t.Fatalf("hits=%v", got.Hits)
-		}
-	})
-
-	t.Run("include then exclude", func(t *testing.T) {
-		// include matches 3 (anything mentioning a verb 'Update' or function/tooling),
-		// then exclude knocks out documentation entries.
-		rules := []Rule{
-			mustRegex(t, "in-anything", ActionInclude, `.+`),
-			mustKeyword(t, "ex-docs", ActionExclude, "documentation"),
-		}
-		got := Apply(rules, all)
-		want := []string{
-			"Update meson build scripts",
-			"Improve pg_dump performance",
-			"Add new SQL function jsonb_path_exists",
-		}
-		if !reflect.DeepEqual(keptDetails(got.Kept), want) {
-			t.Fatalf("kept=%v, want %v", keptDetails(got.Kept), want)
-		}
-		if got.Hits["in-anything"] != 4 {
-			t.Fatalf("include hits=%d, want 4", got.Hits["in-anything"])
-		}
-		if got.Hits["ex-docs"] != 1 {
-			t.Fatalf("exclude hits=%d, want 1", got.Hits["ex-docs"])
-		}
-	})
-
-	t.Run("multiple include rules: union (OR)", func(t *testing.T) {
-		rules := []Rule{
-			mustKeyword(t, "in-pgdump", ActionInclude, "pg_dump"),
-			mustKeyword(t, "in-jsonb", ActionInclude, "jsonb"),
-		}
-		got := Apply(rules, all)
-		want := []string{
-			"Improve pg_dump performance",
-			"Add new SQL function jsonb_path_exists",
-		}
-		if !reflect.DeepEqual(keptDetails(got.Kept), want) {
-			t.Fatalf("kept=%v, want %v", keptDetails(got.Kept), want)
 		}
 	})
 
@@ -163,8 +154,8 @@ func TestApply(t *testing.T) {
 		}
 		gotA := Apply(rulesA, all)
 		gotB := Apply(rulesB, all)
-		if !reflect.DeepEqual(keptDetails(gotA.Kept), keptDetails(gotB.Kept)) {
-			t.Fatalf("order matters: A=%v B=%v", keptDetails(gotA.Kept), keptDetails(gotB.Kept))
+		if !reflect.DeepEqual(keptDetails(gotA.Kept()), keptDetails(gotB.Kept())) {
+			t.Fatalf("order matters: A=%v B=%v", keptDetails(gotA.Kept()), keptDetails(gotB.Kept()))
 		}
 	})
 
@@ -176,13 +167,8 @@ func TestApply(t *testing.T) {
 		if v, ok := got.Hits["ex-no-match"]; !ok || v != 0 {
 			t.Fatalf("expected ex-no-match=0 in hits, got %v", got.Hits)
 		}
-		// All releases should survive.
-		got2 := keptDetails(got.Kept)
-		want := keptDetails(all)
-		sort.Strings(got2)
-		sort.Strings(want)
-		if !reflect.DeepEqual(got2, want) {
-			t.Fatalf("kept=%v, want %v", got2, want)
+		if !reflect.DeepEqual(keptDetails(got.Kept()), keptDetails(all)) {
+			t.Fatalf("expected all kept, got %v", keptDetails(got.Kept()))
 		}
 	})
 
@@ -192,8 +178,38 @@ func TestApply(t *testing.T) {
 			mustKeyword(t, "ex-build", ActionExclude, "meson"),
 		}
 		got := Apply(rules, rs)
-		if len(got.Kept) != 0 {
-			t.Fatalf("expected all excluded, got %v", keptDetails(got.Kept))
+		if len(got.Kept()) != 0 {
+			t.Fatalf("expected all excluded, got %v", keptDetails(got.Kept()))
+		}
+		if got.Items[0].ExcludedBy[0] != "ex-build" {
+			t.Fatalf("ExcludedBy=%v", got.Items[0].ExcludedBy)
 		}
 	})
+
+	t.Run("regex matcher", func(t *testing.T) {
+		rs := releases("On Windows, fix path separator", "On Linux, fix locale")
+		rules := []Rule{
+			mustRegex(t, "ex-windows", ActionExclude, `(?i)\bon Windows\b`),
+		}
+		got := Apply(rules, rs)
+		if len(got.Kept()) != 1 || got.Kept()[0].Detail != "On Linux, fix locale" {
+			t.Fatalf("Kept()=%v", keptDetails(got.Kept()))
+		}
+	})
+}
+
+func TestAnnotateAll(t *testing.T) {
+	rs := releases("a", "b", "c")
+	got := AnnotateAll(rs)
+	if len(got) != 3 {
+		t.Fatalf("len=%d, want 3", len(got))
+	}
+	for i, it := range got {
+		if it.Release.Detail != rs[i].Detail {
+			t.Errorf("[%d].Release=%v, want %v", i, it.Release, rs[i])
+		}
+		if it.ExcludedBy != nil {
+			t.Errorf("[%d].ExcludedBy should be nil, got %v", i, it.ExcludedBy)
+		}
+	}
 }

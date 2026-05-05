@@ -75,14 +75,14 @@ func compileRule(rr rawRule, idx int) (Rule, error) {
 
 	var action Action
 	switch rr.Action {
-	case string(ActionInclude):
-		action = ActionInclude
 	case string(ActionExclude):
 		action = ActionExclude
 	case "":
 		return Rule{}, fmt.Errorf("%s: action is required", where)
+	case "include":
+		return Rule{}, fmt.Errorf("%s: action=%q is not supported in v0.2.0 (only %q is supported)", where, rr.Action, ActionExclude)
 	default:
-		return Rule{}, fmt.Errorf("%s: invalid action %q (must be include or exclude)", where, rr.Action)
+		return Rule{}, fmt.Errorf("%s: invalid action %q (must be exclude)", where, rr.Action)
 	}
 
 	var kind Kind

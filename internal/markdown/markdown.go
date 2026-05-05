@@ -36,7 +36,7 @@ func Render(w io.Writer, releases []scraper.Release, start, end string, summary 
 	ew.println("Source: https://www.postgresql.org/docs/release/")
 	if summary != nil {
 		ew.println()
-		ew.printf("Filter: rules=%s  kept=%d/%d\n", summary.RulesPath, len(summary.Result.Kept), summary.Result.Total)
+		ew.printf("Filter: rules=%s  kept=%d/%d\n", summary.RulesPath, len(releases), summary.Result.Total)
 		for _, r := range summary.Rules {
 			ew.printf("- %s (%s, %s): matched %d\n", r.ID, r.Action, r.Kind, summary.Result.Hits[r.ID])
 		}

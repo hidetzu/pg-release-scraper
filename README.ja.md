@@ -46,7 +46,7 @@ pg-release-scraper --start 14.0 --end 15.6
 | `--stdout` | Markdown を `.md` ファイルではなく標準出力に書く（xlsx が含まれる場合は引き続きファイル出力） | `false` |
 | `--output <dir>` | 出力先ディレクトリ | `./output` |
 | `--quiet` | エラー以外の出力を抑制 | `false` |
-| `--rules <path>` | include/exclude フィルタ用 YAML ルールファイル — [ルールによるフィルタリング](#ルールによるフィルタリング)を参照 | — |
+| `--rules <path>` | exclude フィルタ用 YAML ルールファイル — [ルールによるフィルタリング](#ルールによるフィルタリング)を参照 | — |
 | `--version` | ツールのバージョンを表示して終了 | — |
 
 ### LLM へのパイプ
@@ -131,7 +131,7 @@ pg-release-scraper --start 14.5 --end 15.6 --rules examples/rules/app-impact.yam
 version: 1
 rules:
   - id: exclude-build
-    action: exclude         # include | exclude
+    action: exclude         # v0.2.0 では exclude のみサポート
     match:
       kind: regex           # keyword | regex
       target: detail        # v0.2.0 では detail のみサポート
@@ -144,21 +144,20 @@ rules:
 - `regex` は Go の [RE2](https://pkg.go.dev/regexp/syntax) 構文（PCRE系の前後読みは不可）。大小無視は `(?i)` をパターン先頭に付けてください。
 - `id` はファイル内ユニーク。
 - `rationale` はマッチ判定に影響しない情報項目です。
+- `include` アクションは v0.2.0 では**サポート外**です。指定すると `exit 2` で停止します。
 
-### 評価順序
+### 評価
 
-1. `include` ルールが1件以上あれば、いずれかにマッチ（OR）した項目のみが残ります。`include` 未指定時は全件通過。
-2. その後、いずれかの `exclude` ルールにマッチ（OR）した項目を除外します。
-
-ルールの記述順は結果に影響しません。
+各リリースノート項目は、すべての `exclude` ルールに対してマッチ判定されます。1件でもマッチ（OR）した項目は対象外として扱われます。ルールの記述順は結果に影響しません。
 
 ### 出力への反映
 
-`--rules` 指定時、kept/removed 件数とルール別マッチ数が以下に出力されます。
+`--rules` 指定時:
 
-- stderr（`--quiet` で抑制）
-- Markdown ヘッダ
-- Excel `Attribution` シート末尾の「Filter rules」セクション
+- **stderr**（`--quiet` で抑制）: kept/removed 件数とルール別マッチ数
+- **Markdown**（残った項目のみ）: ヘッダにフィルター情報。除外された項目は出力されません
+- **Excel メインシート**（全件）: 除外された項目も含めて全件出力。除外項目は F 列（`確認結果`）に `対象外 (rule: <id>[, <id>...])` が自動入力され、レビュー時に上書き可能です
+- **Excel `Attribution` シート**: ルール一覧（ID/Action/Kind/Value/Matched/Rationale）
 
 ### バリデーションエラー
 

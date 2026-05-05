@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hidetzu/pg-release-scraper/internal/filter"
-	"github.com/hidetzu/pg-release-scraper/internal/scraper"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -16,7 +16,10 @@ const attributionSheetName = "Attribution"
 
 var headers = []string{"Ver", "No", "原文", "翻訳(意味)", "調査キーワード", "確認結果", "調査対象", "備考"}
 
-func Write(releases []scraper.Release, outDir string, summary *filter.Summary) (string, error) {
+// Write renders all items (including ones excluded by rules) to the main
+// worksheet. Excluded items get an automatic mark in the 確認結果 (F)
+// column so reviewers can audit and override the auto-judgement.
+func Write(items []filter.Annotated, outDir string, summary *filter.Summary) (string, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
@@ -35,16 +38,22 @@ func Write(releases []scraper.Release, outDir string, summary *filter.Summary) (
 		}
 	}
 
-	for i, r := range releases {
+	for i, it := range items {
 		row := i + 2
-		if err := f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), r.Version); err != nil {
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), it.Release.Version); err != nil {
 			return "", err
 		}
 		if err := f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), i+1); err != nil {
 			return "", err
 		}
-		if err := f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), r.Detail); err != nil {
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), it.Release.Detail); err != nil {
 			return "", err
+		}
+		if len(it.ExcludedBy) > 0 {
+			mark := fmt.Sprintf("対象外 (rule: %s)", strings.Join(it.ExcludedBy, ", "))
+			if err := f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), mark); err != nil {
+				return "", err
+			}
 		}
 	}
 
@@ -83,7 +92,7 @@ func Write(releases []scraper.Release, outDir string, summary *filter.Summary) (
 		return "", err
 	}
 
-	lastRow := len(releases) + 1
+	lastRow := len(items) + 1
 	if err := f.SetCellStyle(sheetName, "A1", fmt.Sprintf("H%d", lastRow), borderStyle); err != nil {
 		return "", err
 	}
@@ -140,7 +149,7 @@ func addAttributionSheet(f *excelize.File, summary *filter.Summary) error {
 
 func writeFilterSection(f *excelize.File, startRow int, s *filter.Summary) error {
 	row := startRow
-	header := fmt.Sprintf("Filter rules: %s  (kept %d / %d)", s.RulesPath, len(s.Result.Kept), s.Result.Total)
+	header := fmt.Sprintf("Filter rules: %s  (kept %d / %d)", s.RulesPath, len(s.Result.Kept()), s.Result.Total)
 	cell, _ := excelize.CoordinatesToCellName(1, row)
 	if err := f.SetCellValue(attributionSheetName, cell, header); err != nil {
 		return err

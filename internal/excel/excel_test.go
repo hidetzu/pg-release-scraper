@@ -6,19 +6,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hidetzu/pg-release-scraper/internal/filter"
 	"github.com/hidetzu/pg-release-scraper/internal/scraper"
 	"github.com/xuri/excelize/v2"
 )
 
 func TestWrite(t *testing.T) {
 	dir := t.TempDir()
-	releases := []scraper.Release{
+	items := filter.AnnotateAll([]scraper.Release{
 		{Version: "15.6", Detail: "First release note item"},
 		{Version: "15.6", Detail: "Second release note item\nwith newline"},
 		{Version: "15.7", Detail: "Item from a later version"},
-	}
+	})
 
-	path, err := Write(releases, dir, nil)
+	path, err := Write(items, dir, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -97,4 +98,49 @@ func TestWrite(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestWrite_ExcludedItemsMarked(t *testing.T) {
+	dir := t.TempDir()
+	items := []filter.Annotated{
+		{Release: scraper.Release{Version: "15.6", Detail: "Kept item"}},
+		{
+			Release:    scraper.Release{Version: "15.6", Detail: "Excluded by one rule"},
+			ExcludedBy: []string{"ex-build"},
+		},
+		{
+			Release:    scraper.Release{Version: "15.7", Detail: "Excluded by two rules"},
+			ExcludedBy: []string{"ex-build", "ex-docs"},
+		},
+	}
+
+	path, err := Write(items, dir, nil)
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+
+	// All 3 items should be present in the main sheet (excluded ones are NOT
+	// dropped — they get a marker in the 確認結果 column instead).
+	cases := []struct{ cell, want string }{
+		{"C2", "Kept item"},
+		{"F2", ""},
+		{"C3", "Excluded by one rule"},
+		{"F3", "対象外 (rule: ex-build)"},
+		{"C4", "Excluded by two rules"},
+		{"F4", "対象外 (rule: ex-build, ex-docs)"},
+	}
+	for _, c := range cases {
+		got, err := f.GetCellValue("PostgreSQLリリースノート", c.cell)
+		if err != nil {
+			t.Fatalf("GetCellValue %s: %v", c.cell, err)
+		}
+		if got != c.want {
+			t.Errorf("%s = %q, want %q", c.cell, got, c.want)
+		}
+	}
 }

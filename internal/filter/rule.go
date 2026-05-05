@@ -10,7 +10,6 @@ import (
 type Action string
 
 const (
-	ActionInclude Action = "include"
 	ActionExclude Action = "exclude"
 )
 
